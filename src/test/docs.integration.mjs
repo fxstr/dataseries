@@ -9,34 +9,36 @@ import DataSeries from '../index.mjs';
 // Tests code of the documentation (README.md)
 
 test('creates and updates data', (t) => {
-    const mean = (...numbers) => numbers.reduce((sum, nr) => sum + nr, 0) / numbers.length;
+
+    // Read data from a CSV file; dataFolder is the current execution path (which is needed if
+    // you are using ES6 modules)
     const dataFolder = dirname(fileURLToPath(new URL(import.meta.url)));
-    const files = glob.sync(`${dataFolder}/testData/**.csv`);
-    const content = files.map(filePath => [filePath, readFileSync(filePath, 'utf8')]);
-    const dataSeries = content.map(([fileName, fileContent]) => {
-        const csv = parseCSV(fileContent, { columns: true });
-        let ds = DataSeries.fromObjects(csv);
-        ds = ds.renameColumns(name => (
-            name
-                .replace(/^(\w)/g, (match, firstLetter) => firstLetter.toLowerCase())
-                .replace(/\s+(\w)/g, (match, letter) => letter.toUpperCase())
+
+    // Calculates arithmetic mean of an arbitrary amount of numbers
+    const mean = (...numbers) => numbers.reduce((sum, nr) => sum + nr, 0) / numbers.length;
+
+    const dataSeries = DataSeries
+        // Create dataSeries from a CSV file
+        .fromCSV(`${dataFolder}/testData/AAPL.csv`)
+        // Convert every column's data into the correct format (is a string by default)
+        .updateValues((key, value) => {
+            // Convert data of column 'date' to a JS date
+            if (key === 'date') return new Date(value);
+            // Convert all other columns to a number
+            return parseFloat(value);
+        })
+        // Add a new column 'mean' that contains the arithmetic mean of the column 'close' for 5
+        // rows
+        .addColumnsFromSegments(['close'], 5, closeData => (
+            new Map([['arithmeticMeanOfClose', mean(...closeData)]])
         ));
-        ds = ds.updateValues((key, value) => key === 'date' ? new Date(value) : parseFloat(value));
-        const instrument = parse(fileName).name;
-        ds = ds.addColumn('instrument', Array.from({ length: ds.size }).map(() => instrument));
-        ds = ds.addColumnsFromSegments(['close'], 3, (closeData, length) => (
-            new Map([['meanClose', closeData.length < length ? null : mean(...closeData)]])
-        ));
-        // console.log(ts.getData());
-    });
-    t.pass();
+
+    // Print the first five rows
+    console.log(dataSeries.head(5).getData());
+
+    t.is(dataSeries.head(5).size, 5);
+    t.is(dataSeries.head(5).getData()[4].get('arithmeticMeanOfClose'), 193.69400019999998);
+
 });
 
-
-// const dataFolder = dirname(fileURLToPath(new URL(import.meta.url)));
-// const ts = TimeSeries.fromCSVs({
-//     files: `${dataFolder}/**/*.csv`,
-//     updateValues: (key, value) => key === 'date' ? new Date(value) : parseFloat(value),
-//     fileNameColumn: 'instrument',
-// });
 
